@@ -126,6 +126,22 @@ public:
     clear_got_signal();
     got_any_signal = 0;
 
+#ifdef __BIONIC__
+    // why? see https://groups.google.com/forum/#!msg/android-kernel/-QjGa3Y5JKM/Cny6Ae-9KrYJ
+    // short version: userland sigset_t size != kernel sigset_t size
+    sigset_t oldmask;
+    struct timeval tv, *tvp = NULL;
+    
+    if( timeout >= 0) {
+        tv.tv_sec = timeout / 1000;
+        tv.tv_usec = 1000 * (long(timeout) % 1000);
+        tvp = &tv;
+    }
+    
+    sigprocmask( SIG_SETMASK, &empty_sigset, &oldmask );
+    int ret = ::select(max_fd +1, &read_fds, NULL, &error_fds, tvp);
+    sigprocmask( SIG_SETMASK, &oldmask, NULL );
+#else
 #ifdef HAVE_PSELECT
     struct timespec ts;
     struct timespec *tsp = NULL;
@@ -153,6 +169,7 @@ public:
       ret = ::select( max_fd + 1, &read_fds, NULL, &error_fds, tvp );
       sigprocmask( SIG_SETMASK, &old_sigset, NULL );
     }
+#endif
 #endif
 
     if ( ( ret == -1 ) && ( errno == EINTR ) ) {
